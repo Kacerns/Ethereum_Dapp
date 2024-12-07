@@ -2,37 +2,44 @@
 pragma solidity ^0.8.0;
 
 contract Auction {
-    // Auction state
-    address payable public seller;
-    string public itemName;
-    uint public startPrice;
-    uint public auctionEndTime;
-    bool public ended;
+    // Auction state variables (private)
+    address payable private immutable seller;
+    string private itemName;
+    uint private startPrice;
+    uint private auctionEndTime;
+    bool internal ended;
 
-    address public highestBidder;
-    uint public highestBid;
+    address private highestBidder;
+    uint private highestBid;
 
-    // Mapping to track pending returns for outbid participants
-    mapping(address => uint) public pendingReturns;
+    // Mapping for pending returns, private to prevent manual tampering
+    mapping(address => uint) private pendingReturns;
 
+    // Events
     event AuctionStarted(string itemName, uint startPrice, uint duration);
-    event NewBid(address bidder, uint amount);
-    event AuctionEnded(address winner, uint amount);
+    event NewBid(address indexed bidder, uint amount);
+    event AuctionEnded(address indexed winner, uint amount);
+    event Withdrawal(address indexed bidder, uint amount);
 
+    // Constructor (sets immutable values)
     constructor(string memory _itemName, uint _startPrice, uint _durationMinutes) {
+        require(_durationMinutes > 0, "Auction duration must be greater than zero.");
+        
         seller = payable(msg.sender);
         itemName = _itemName;
         startPrice = _startPrice;
         auctionEndTime = block.timestamp + (_durationMinutes * 1 minutes);
+
         emit AuctionStarted(itemName, startPrice, _durationMinutes);
     }
 
-    // Bid function
-    function bid() public payable {
+    // Public Bid function
+    function bid() external payable {
+        require(msg.sender != seller, "Seller cannot bid on their own auction.");
         require(block.timestamp < auctionEndTime, "Auction has ended.");
         require(msg.value > highestBid, "There already is a higher or equal bid.");
 
-        // Refund the previous highest bidder
+        // Refund the previous highest bidder safely
         if (highestBid != 0) {
             pendingReturns[highestBidder] += highestBid;
         }
@@ -40,32 +47,61 @@ contract Auction {
         // Update highest bid
         highestBidder = msg.sender;
         highestBid = msg.value;
+
         emit NewBid(msg.sender, msg.value);
     }
 
-    // Withdraw overbid funds
-    function withdraw() public {
+    // Public Withdraw function (only allows caller to withdraw)
+    function withdraw() external {
         uint amount = pendingReturns[msg.sender];
         require(amount > 0, "No funds to withdraw.");
 
+        // Reset before sending funds (Checks-Effects-Interactions)
         pendingReturns[msg.sender] = 0;
 
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Withdrawal failed.");
+
+        emit Withdrawal(msg.sender, amount);
     }
 
-    // End the auction
-    function endAuction() public {
+    // End the auction (Only the seller can call this)
+    function endAuction() external {
+        require(msg.sender == seller, "Only the seller can end the auction.");
         require(block.timestamp >= auctionEndTime, "Auction is still ongoing.");
         require(!ended, "Auction has already ended.");
-        require(msg.sender == seller, "Only the seller can end the auction.");
 
         ended = true;
 
-        // Transfer funds to seller
-        (bool success, ) = seller.call{value: highestBid}("");
+        uint finalAmount = highestBid;
+        address winner = highestBidder;
+
+        // Transfer funds to the seller
+        (bool success, ) = seller.call{value: finalAmount}("");
         require(success, "Transfer to seller failed.");
 
-        emit AuctionEnded(highestBidder, highestBid);
+        emit AuctionEnded(winner, finalAmount);
+    }
+
+    // Public getters for critical information (read-only)
+    function getAuctionDetails() external view returns (
+        string memory, uint, uint, bool, address, uint
+    ) {
+        return (
+            itemName,
+            startPrice,
+            auctionEndTime,
+            ended,
+            highestBidder,
+            highestBid
+        );
+    }
+
+    function getPendingReturns(address bidder) external view returns (uint) {
+        return pendingReturns[bidder];
+    }
+
+    function getSeller() external view returns (address) {
+        return seller;
     }
 }
