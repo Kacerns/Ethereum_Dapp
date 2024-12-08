@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  BrowserProvider,
-  Contract,
-  parseEther,
-  formatEther,
-} from "ethers";
+import { ethers } from "ethers";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // ABI and contract address
@@ -208,7 +203,7 @@ const auctionABI = [
     "constant": true
   }
 ];
-const contractAddress = "0xeBd16cF3C60fBe77F61ae9F8f066EDFAAf2495A9";
+const contractAddress = "0x0Fa2ff5E934B69496280d3A8E9E9a2A0EDF4Be2E"; // Replace with your contract's deployed address
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -217,67 +212,60 @@ function App() {
   const [highestBid, setHighestBid] = useState(0);
   const [highestBidder, setHighestBidder] = useState("");
   const [auctionEnded, setAuctionEnded] = useState(false);
+
   const [bidAmount, setBidAmount] = useState("");
 
-  // Connect Wallet
   useEffect(() => {
     async function connectWallet() {
-      try {
-        if (!window.ethereum) throw new Error("MetaMask is not installed.");
-
-        const tempProvider = new BrowserProvider(window.ethereum);
+      if (window.ethereum) {
+        const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
         await tempProvider.send("eth_requestAccounts", []);
-        const tempSigner = await tempProvider.getSigner();
-        const tempContract = new Contract(contractAddress, auctionABI, tempSigner);
+        const tempSigner = tempProvider.getSigner();
+        const tempContract = new ethers.Contract(contractAddress, auctionABI, tempSigner);
 
         setProvider(tempProvider);
         setSigner(tempSigner);
         setContract(tempContract);
-      } catch (err) {
-        alert(err.message);
+      } else {
+        alert("Please install MetaMask to use this dApp.");
       }
     }
     connectWallet();
   }, []);
 
-  // Fetch Auction Details
   useEffect(() => {
     async function fetchAuctionData() {
       if (contract) {
-        try {
-          const [itemName, startPrice, duration, ended, highestBidder, highestBid] = await contract.getAuctionDetails();
-          const currentTime = Math.floor(Date.now() / 1000);
+        const highestBid = await contract.highestBid();
+        const highestBidder = await contract.highestBidder();
+        const auctionEndTime = await contract.auctionEndTime();
+        const currentTime = Math.floor(Date.now() / 1000);
 
-          setHighestBid(formatEther(highestBid));
-          setHighestBidder(highestBidder);
-          setAuctionEnded(ended || currentTime > duration);
-        } catch (err) {
-          console.error("Error fetching auction data:", err.message);
-        }
+        setHighestBid(ethers.utils.formatEther(highestBid));
+        setHighestBidder(highestBidder);
+        setAuctionEnded(currentTime > auctionEndTime);
       }
     }
     fetchAuctionData();
   }, [contract]);
 
-  // Place Bid
   const placeBid = async () => {
     try {
-      const tx = await contract.bid({ value: parseEther(bidAmount) });
+      const tx = await contract.bid({ value: ethers.utils.parseEther(bidAmount) });
       await tx.wait();
       alert("Bid placed successfully!");
     } catch (err) {
-      alert(`Error placing bid: ${err.message}`);
+      alert(err.message);
     }
   };
 
-  // End Auction
   const endAuction = async () => {
     try {
       const tx = await contract.endAuction();
       await tx.wait();
       alert("Auction ended successfully!");
     } catch (err) {
-      alert(`Error ending auction: ${err.message}`);
+      alert(err.message);
     }
   };
 
