@@ -74,10 +74,8 @@ contract("Auction", (accounts) => {
 
   it("should end the auction and transfer funds", async () => {
     await auctionInstance.bid({ from: buyer1, value: web3.utils.toWei("2", "ether") });
-  
-    // Fast-forward blockchain time
-    await increaseTime(360); // Increase time by 6 seconds (auction duration is 5)
-  
+
+    await increaseTime(360);
     await auctionInstance.endAuction({ from: seller });
     const ended = await auctionInstance.ended();
     assert.equal(ended, true, "Auction should be marked as ended");

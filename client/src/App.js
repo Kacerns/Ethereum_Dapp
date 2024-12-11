@@ -1,309 +1,191 @@
-import React, { useState, useEffect } from "react";
-import { ethers } from "ethers";
-import "bootstrap/dist/css/bootstrap.min.css";
+import './App.css';
+import { useEffect, useState } from 'react';
+import { ethers } from 'ethers';
+import { parseEther, formatEther } from '@ethersproject/units';
+import Auction from './contracts/Auction.json';
 
-// ABI and contract address
-const auctionABI = [
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "_itemName",
-        "type": "string"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_startPrice",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_durationMinutes",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "winner",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "AuctionEnded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "itemName",
-        "type": "string"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "startPrice",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "duration",
-        "type": "uint256"
-      }
-    ],
-    "name": "AuctionStarted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "bidder",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "NewBid",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "bidder",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "Withdrawal",
-    "type": "event"
-  },
-  {
-    "inputs": [],
-    "name": "bid",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function",
-    "payable": true
-  },
-  {
-    "inputs": [],
-    "name": "withdraw",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "endAuction",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getAuctionDetails",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function",
-    "constant": true
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "bidder",
-        "type": "address"
-      }
-    ],
-    "name": "getPendingReturns",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function",
-    "constant": true
-  },
-  {
-    "inputs": [],
-    "name": "getSeller",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function",
-    "constant": true
-  }
-];
-const contractAddress = "0x0Fa2ff5E934B69496280d3A8E9E9a2A0EDF4Be2E"; // Replace with your contract's deployed address
+const AuctionContractAddress = "0xF57173dc3734DcCd012ab38B921442F27892DC47";
+const emptyAddress = '0x0000000000000000000000000000000000000000';
 
 function App() {
-  const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
-  const [contract, setContract] = useState(null);
+  const [account, setAccount] = useState('');
+  const [amount, setAmount] = useState(0);
+  const [myPendingReturns, setMyPendingReturns] = useState(0);
+  const [isSeller, setIsSeller] = useState(false);
   const [highestBid, setHighestBid] = useState(0);
-  const [highestBidder, setHighestBidder] = useState("");
-  const [auctionEnded, setAuctionEnded] = useState(false);
+  const [highestBidder, setHighestBidder] = useState('');
+  const [auctionDetails, setAuctionDetails] = useState({});
 
-  const [bidAmount, setBidAmount] = useState("");
+  async function initializeProvider() {
+    if (typeof window.ethereum === 'undefined') {
+      throw new Error('MetaMask is not installed');
+    }
+    
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    return new ethers.Contract(AuctionContractAddress, Auction.abi, signer);
+  }
+  
 
-  useEffect(() => {
-    async function connectWallet() {
-      if (window.ethereum) {
-        const tempProvider = new ethers.providers.Web3Provider(window.ethereum);
-        await tempProvider.send("eth_requestAccounts", []);
-        const tempSigner = tempProvider.getSigner();
-        const tempContract = new ethers.Contract(contractAddress, auctionABI, tempSigner);
+  async function requestAccount() {
+    if (typeof window.ethereum !== 'undefined') {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        setAccount(accounts[0]);
+      } catch (e) {
+        console.error("Error requesting account:", e);
+      }
+    } else {
+      alert('MetaMask is not installed. Please install it to use this application.');
+    }
+  }
 
-        setProvider(tempProvider);
-        setSigner(tempSigner);
-        setContract(tempContract);
-      } else {
-        alert("Please install MetaMask to use this dApp.");
+  async function fetchAuctionDetails() {
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+        const details = await contract.getAuctionDetails();
+  
+        setAuctionDetails({
+          itemName: details[0],
+          startPrice: Number(ethers.formatEther(details[1])),
+          auctionEndTime: new Date(Number(details[2]) * 1000).toLocaleString(),
+          ended: details[3],
+          highestBidder: details[4].toLowerCase(),
+          highestBid: Number(ethers.formatEther(details[5])).toFixed(4),
+        });
+      } catch (e) {
+        console.error('Error fetching auction details:', e);
       }
     }
-    connectWallet();
+  }
+
+  async function fetchMyPendingReturns() {
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+        const pendingReturns = await contract.getPendingReturns(account);
+        setMyPendingReturns(parseFloat(formatEther(pendingReturns.toString())).toPrecision(4));
+      } catch (e) {
+        console.error('Error fetching pending returns:', e);
+      }
+    }
+  }
+
+  async function fetchSeller() {
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+        const seller = await contract.getSeller();
+        setIsSeller(seller.toLowerCase() === account);
+      } catch (e) {
+        console.error('Error fetching seller:', e);
+      }
+    }
+  }
+
+  async function submitBid(event) {
+    event.preventDefault();
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+        const wei = ethers.parseEther(amount.toString());
+        
+        console.log("Submitting bid with value:", wei.toString());
+        console.log("Auction contract address:", AuctionContractAddress);
+        
+        const tx = await contract.bid({ value: wei });
+        await tx.wait();
+  
+        await fetchAuctionDetails();
+        await fetchMyPendingReturns();
+      } catch (e) {
+        console.error('Error making bid:', e);
+      }
+    }
+  }
+  async function endAuction(event) {
+    event.preventDefault();
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+
+        const auctionEndTime = new Date(auctionDetails.auctionEndTime).getTime(); // Get the auction end time
+        const currentTime = Date.now()
+
+        console.log(auctionEndTime);
+        console.log(currentTime);
+
+        if(currentTime > auctionEndTime){
+          await contract.endAuction();
+
+          await fetchAuctionDetails();
+          await fetchMyPendingReturns();
+        }
+        else{
+          alert("The Auction has not yet Ended");
+        }
+        
+      } catch (e) {
+        console.error('Error ending auction:', e);
+      }
+    }
+  }
+  
+
+  async function withdraw() {
+    if (typeof window.ethereum !== 'undefined') {
+      const contract = await initializeProvider();
+      try {
+        await contract.withdraw();
+        await fetchMyPendingReturns();
+      } catch (e) {
+        console.error('Error withdrawing funds:', e);
+      }
+    }
+  }
+
+  useEffect(() => {
+    requestAccount();
   }, []);
 
   useEffect(() => {
-    async function fetchAuctionData() {
-      if (contract) {
-        const highestBid = await contract.highestBid();
-        const highestBidder = await contract.highestBidder();
-        const auctionEndTime = await contract.auctionEndTime();
-        const currentTime = Math.floor(Date.now() / 1000);
-
-        setHighestBid(ethers.utils.formatEther(highestBid));
-        setHighestBidder(highestBidder);
-        setAuctionEnded(currentTime > auctionEndTime);
-      }
+    if (account) {
+      fetchSeller();
+      fetchAuctionDetails();
+      fetchMyPendingReturns();
     }
-    fetchAuctionData();
-  }, [contract]);
-
-  const placeBid = async () => {
-    try {
-      const tx = await contract.bid({ value: ethers.utils.parseEther(bidAmount) });
-      await tx.wait();
-      alert("Bid placed successfully!");
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const endAuction = async () => {
-    try {
-      const tx = await contract.endAuction();
-      await tx.wait();
-      alert("Auction ended successfully!");
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+  }, [account]);
 
   return (
-    <div className="container mt-5">
-      <h1>Auction dApp</h1>
-      <div className="card mt-4">
-        <div className="card-body">
-          <h5 className="card-title">Auction Details</h5>
-          <p><strong>Highest Bid:</strong> {highestBid} ETH</p>
-          <p><strong>Highest Bidder:</strong> {highestBidder}</p>
-          <p><strong>Auction Ended:</strong> {auctionEnded ? "Yes" : "No"}</p>
-        </div>
-      </div>
+    <div style={{ textAlign: 'center', width: '50%', margin: '0 auto', marginTop: '100px' }}>
+      {myPendingReturns > 0 ? (
+        <button type="button" onClick={withdraw}>Withdraw</button>
+      ) : null}
 
-      <div className="mt-4">
-        <h5>Place a Bid</h5>
-        <div className="form-group">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Bid amount in ETH"
-            value={bidAmount}
-            onChange={(e) => setBidAmount(e.target.value)}
-          />
-        </div>
-        <button className="btn btn-primary mt-2" onClick={placeBid} disabled={auctionEnded}>
-          Place Bid
-        </button>
-      </div>
+      <div style={{ textAlign: 'center', marginTop: '20px', paddingBottom: '10px', border: '1px solid black' }}>
+        <p>Connected Account: {account}</p>
+        <p>Pending Returns: {myPendingReturns} ETH</p>
+        <p>Auction Item: {auctionDetails.itemName}</p>
+        <p>Start Price: {auctionDetails.startPrice} ETH</p>
+        <p>Auction End Time: {auctionDetails.auctionEndTime}</p>
+        <p>Auction Ended: {auctionDetails.ended ? 'Yes' : 'No'}</p>
+        <p>Highest Bid: {auctionDetails.highestBid} ETH</p>
+        <p>Highest Bidder: {auctionDetails.highestBidder === emptyAddress ? 'None' : auctionDetails.highestBidder === account ? 'Me' : auctionDetails.highestBidder}</p>
 
-      {signer && (
-        <div className="mt-4">
-          <button className="btn btn-danger" onClick={endAuction} disabled={!auctionEnded}>
-            End Auction
-          </button>
-        </div>
-      )}
+        {!isSeller && !auctionDetails.ended ? (
+          <form onSubmit={submitBid}>
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              name="Bid Amount"
+              type="number"
+              placeholder="Enter Bid Amount in ETH"
+            />
+            <button type="submit">Submit Bid</button>
+          </form>
+        ) : <button onClick={endAuction}>End Auction</button>}
+      </div>
     </div>
   );
 }

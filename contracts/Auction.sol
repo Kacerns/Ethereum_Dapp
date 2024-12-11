@@ -58,18 +58,21 @@ contract Auction {
 
     function endAuction() external {
         require(msg.sender == seller, "Only the seller can end the auction.");
-        require(block.timestamp >= auctionEndTime, "Auction is still ongoing.");
         require(!ended, "Auction has already ended.");
 
         ended = true;
+        if(highestBid>0){
+            uint finalAmount = highestBid;
+            address winner = highestBidder;
 
-        uint finalAmount = highestBid;
-        address winner = highestBidder;
+            (bool success, ) = seller.call{value: finalAmount}("");
+            require(success, "Transfer to seller failed.");
 
-        (bool success, ) = seller.call{value: finalAmount}("");
-        require(success, "Transfer to seller failed.");
-
-        emit AuctionEnded(winner, finalAmount);
+            emit AuctionEnded(winner, finalAmount);
+        }
+        else{
+            require(highestBid > 0, "Nobody has bid");
+        }
     }
 
     function getAuctionDetails() external view returns (
