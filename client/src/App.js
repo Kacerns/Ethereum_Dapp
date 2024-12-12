@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { parseEther, formatEther } from '@ethersproject/units';
 import Auction from './contracts/Auction.json';
 
-const AuctionContractAddress = "0xF57173dc3734DcCd012ab38B921442F27892DC47";
+const AuctionContractAddress = "0x6a9a716357997c960eb547523c01182eff0848b6";
 const emptyAddress = '0x0000000000000000000000000000000000000000';
 
 function App() {
